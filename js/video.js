@@ -13,10 +13,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 
-/* =========================================
-   HELPERS
-========================================= */
-
 const $ = (id) => document.getElementById(id);
 
 let currentUser = null;
@@ -24,7 +20,7 @@ let unsubscribeVideo = null;
 
 
 /* =========================================
-   AUTH
+   LOGIN CHECK
 ========================================= */
 
 onAuthStateChanged(auth, (user) => {
@@ -33,15 +29,29 @@ onAuthStateChanged(auth, (user) => {
 
   if (!user) {
     window.location.href = "login.html";
-    return;
   }
 
 });
 
 
 /* =========================================
-   SCREENSHOT COMPRESS
-   Firestore document 1 MiB से छोटा रखने के लिए
+   HTML ESCAPE
+========================================= */
+
+function escapeHtml(value) {
+
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+}
+
+
+/* =========================================
+   COMPRESS SCREENSHOT
 ========================================= */
 
 function compressImage(file) {
@@ -50,46 +60,35 @@ function compressImage(file) {
 
     const reader = new FileReader();
 
-    reader.onload = () => {
+    reader.onload = function () {
 
       const img = new Image();
 
-      img.onload = () => {
-
-        const MAX_WIDTH = 1280;
-        const MAX_HEIGHT = 900;
+      img.onload = function () {
 
         let width = img.width;
         let height = img.height;
 
+        const maxWidth = 1280;
+        const maxHeight = 900;
 
-        /* Resize */
+        if (width > maxWidth) {
 
-        if (width > MAX_WIDTH) {
+          const ratio = maxWidth / width;
 
-          const ratio =
-            MAX_WIDTH / width;
+          width = maxWidth;
+          height = height * ratio;
 
-          width =
-            MAX_WIDTH;
-
-          height =
-            height * ratio;
         }
 
+        if (height > maxHeight) {
 
-        if (height > MAX_HEIGHT) {
+          const ratio = maxHeight / height;
 
-          const ratio =
-            MAX_HEIGHT / height;
+          height = maxHeight;
+          width = width * ratio;
 
-          height =
-            MAX_HEIGHT;
-
-          width =
-            width * ratio;
         }
-
 
         const canvas =
           document.createElement("canvas");
@@ -99,7 +98,6 @@ function compressImage(file) {
 
         canvas.height =
           Math.round(height);
-
 
         const ctx =
           canvas.getContext("2d");
@@ -112,12 +110,6 @@ function compressImage(file) {
           canvas.height
         );
 
-
-        /*
-         * JPEG quality कम रखकर
-         * Firestore size सुरक्षित रखते हैं
-         */
-
         let quality = 0.70;
 
         let dataUrl =
@@ -125,11 +117,6 @@ function compressImage(file) {
             "image/jpeg",
             quality
           );
-
-
-        /*
-         * लगभग 900KB से ज्यादा न जाने दें
-         */
 
         while (
           dataUrl.length > 900000 &&
@@ -143,52 +130,47 @@ function compressImage(file) {
               "image/jpeg",
               quality
             );
-        }
 
+        }
 
         if (dataUrl.length > 950000) {
 
           reject(
             new Error(
-              "Screenshot बहुत बड़ा है। कृपया छोटा screenshot upload करें।"
+              "Screenshot बहुत बड़ा है। छोटा screenshot upload करें।"
             )
           );
 
           return;
         }
 
-
         resolve(dataUrl);
 
       };
 
-
-      img.onerror = () => {
+      img.onerror = function () {
 
         reject(
           new Error(
-            "Screenshot read नहीं हो सका।"
+            "Screenshot पढ़ा नहीं जा सका।"
           )
         );
 
       };
 
+      img.src = reader.result;
 
-      img.src =
-        reader.result;
     };
 
-
-    reader.onerror = () => {
+    reader.onerror = function () {
 
       reject(
         new Error(
-          "Screenshot upload/read failed."
+          "Screenshot read failed."
         )
       );
 
     };
-
 
     reader.readAsDataURL(file);
 
@@ -198,122 +180,12 @@ function compressImage(file) {
 
 
 /* =========================================
-   STATUS UI
+   DEFAULT STATUS MESSAGE
 ========================================= */
 
-function showStatus(
-  status,
-  progress,
-  message
-) {
+function defaultMessage(status) {
 
-  const statusBox =
-    $("videoStatus");
-
-  if (!statusBox) {
-    return;
-  }
-
-
-  let safeProgress =
-    Number(progress);
-
-  if (
-    Number.isNaN(safeProgress)
-  ) {
-    safeProgress = 0;
-  }
-
-
-  safeProgress =
-    Math.max(
-      0,
-      Math.min(
-        100,
-        safeProgress
-      )
-    );
-
-
-  const statusText =
-    message ||
-    getDefaultStatus(status);
-
-
-  statusBox.innerHTML = `
-
-    <div style="
-      margin-top:18px;
-      padding:18px;
-      border-radius:14px;
-      background:#f7f8fc;
-      border:1px solid #e5e7eb;
-    ">
-
-      <div style="
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        gap:12px;
-        margin-bottom:10px;
-      ">
-
-        <strong style="font-size:16px;">
-          ${escapeHtml(statusText)}
-        </strong>
-
-        <strong style="font-size:16px;">
-          ${safeProgress}%
-        </strong>
-
-      </div>
-
-
-      <div style="
-        width:100%;
-        height:12px;
-        background:#e5e7eb;
-        border-radius:999px;
-        overflow:hidden;
-      ">
-
-        <div style="
-          width:${safeProgress}%;
-          height:100%;
-          background:linear-gradient(
-            90deg,
-            #6366f1,
-            #8b5cf6
-          );
-          border-radius:999px;
-          transition:width .5s ease;
-        "></div>
-
-      </div>
-
-
-      <div style="
-        margin-top:10px;
-        font-size:13px;
-        color:#6b7280;
-      ">
-        Status: ${escapeHtml(status || "processing")}
-      </div>
-
-    </div>
-
-  `;
-
-}
-
-
-/* =========================================
-   DEFAULT STATUS
-========================================= */
-
-function getDefaultStatus(status) {
-
-  const statuses = {
+  const messages = {
 
     queued:
       "⏳ AI video job queue में है...",
@@ -356,49 +228,192 @@ function getDefaultStatus(status) {
 
   };
 
-
   return (
-    statuses[status] ||
+    messages[status] ||
     "⚙️ Video processing हो रही है..."
   );
+
 }
 
 
 /* =========================================
-   HTML ESCAPE
+   SHOW LIVE STATUS
 ========================================= */
 
-function escapeHtml(value) {
+function showStatus(
+  status,
+  progress,
+  message
+) {
 
-  return String(value || "")
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
+  const box = $("videoStatus");
+
+  if (!box) {
+    return;
+  }
+
+  let percent =
+    Number(progress);
+
+  if (Number.isNaN(percent)) {
+    percent = 0;
+  }
+
+  percent =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        percent
+      )
     );
+
+  const text =
+    message ||
+    defaultMessage(status);
+
+  box.innerHTML = `
+    <div class="video-progress-box">
+
+      <div class="video-progress-top">
+        <strong>${escapeHtml(text)}</strong>
+        <strong>${percent}%</strong>
+      </div>
+
+      <div class="video-progress-track">
+        <div
+          class="video-progress-bar"
+          style="width: ${percent}%;">
+        </div>
+      </div>
+
+      <div class="video-progress-status">
+        Status: ${escapeHtml(status || "processing")}
+      </div>
+
+    </div>
+  `;
+
 }
 
 
 /* =========================================
-   READY RESULT
+   ADD PROGRESS CSS
 ========================================= */
 
-function showVideoResult(data) {
+function addProgressCSS() {
+
+  if (document.getElementById("videoProgressCSS")) {
+    return;
+  }
+
+  const style =
+    document.createElement("style");
+
+  style.id =
+    "videoProgressCSS";
+
+  style.textContent = `
+    .video-progress-box {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 14px;
+      background: #f7f8fc;
+      border: 1px solid #e5e7eb;
+    }
+
+    .video-progress-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+      font-size: 15px;
+    }
+
+    .video-progress-track {
+      width: 100%;
+      height: 12px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .video-progress-bar {
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        #6366f1,
+        #8b5cf6
+      );
+      border-radius: 999px;
+      transition: width 0.5s ease;
+    }
+
+    .video-progress-status {
+      margin-top: 10px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+
+    .video-ready-box {
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 14px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+    }
+
+    .video-error-box {
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 14px;
+      background: #fff1f2;
+      border: 1px solid #fecdd3;
+    }
+
+    .video-download-button {
+      display: inline-block;
+      margin-top: 15px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      background: #6366f1;
+      color: white;
+    }
+
+    .video-preview {
+      width: 100%;
+      max-width: 900px;
+      display: block;
+      margin-top: 15px;
+      border-radius: 14px;
+      background: #000;
+    }
+
+    .video-script {
+      margin-top: 18px;
+      padding: 14px;
+      background: #f7f8fc;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      line-height: 1.7;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+}
+
+addProgressCSS();
+
+
+/* =========================================
+   SHOW READY VIDEO
+========================================= */
+
+function showReadyVideo(data) {
 
   const result =
     $("videoResult");
@@ -407,133 +422,87 @@ function showVideoResult(data) {
     return;
   }
 
-
-  const outputUrl =
+  const url =
     data.outputUrl;
 
+  if (!url) {
 
-  if (!outputUrl) {
-
-    result.classList.remove(
-      "hidden"
-    );
+    result.classList.remove("hidden");
 
     result.innerHTML = `
-
-      <h2>⚠️ Video तैयार है</h2>
-
-      <p>
-        Video processing complete हो गई,
-        लेकिन download link अभी नहीं मिला।
-      </p>
-
+      <div class="video-error-box">
+        <h2>⚠️ Video तैयार है</h2>
+        <p>
+          Video बन गई लेकिन download link नहीं मिला।
+        </p>
+      </div>
     `;
 
     return;
   }
 
+  result.classList.remove("hidden");
 
-  result.classList.remove(
-    "hidden"
-  );
+  let scriptHtml = "";
 
+  if (data.script) {
+
+    scriptHtml = `
+      <details style="margin-top:18px;">
+
+        <summary style="cursor:pointer;font-weight:600;">
+          📝 Generated Hindi Script
+        </summary>
+
+        <div class="video-script">
+          ${escapeHtml(data.script)}
+        </div>
+
+      </details>
+    `;
+
+  }
 
   result.innerHTML = `
+    <div class="video-ready-box">
 
-    <h2>🎬 Your AI Video</h2>
+      <h2>🎬 Your AI Video</h2>
 
-    <p style="
-      margin:8px 0 16px;
-      color:#6b7280;
-    ">
-      ${escapeHtml(
-        data.title ||
-        "AI Website Video"
-      )}
-    </p>
+      <p>
+        ${escapeHtml(
+          data.title ||
+          "AI Website Video"
+        )}
+      </p>
 
-
-    <video
-      controls
-      playsinline
-      style="
-        width:100%;
-        max-width:900px;
-        border-radius:14px;
-        display:block;
-        background:#000;
-      "
-      src="${escapeHtml(outputUrl)}">
-    </video>
-
-
-    <div style="
-      margin-top:16px;
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-    ">
+      <video
+        class="video-preview"
+        controls
+        playsinline
+        src="${escapeHtml(url)}">
+      </video>
 
       <a
-        class="primary"
+        class="video-download-button"
         target="_blank"
         rel="noopener"
-        href="${escapeHtml(outputUrl)}"
-        style="
-          display:inline-block;
-          text-decoration:none;
-          padding:12px 18px;
-          border-radius:10px;
-        "
-      >
+        href="${escapeHtml(url)}">
         ⬇️ Download Video
       </a>
 
+      ${scriptHtml}
+
     </div>
-
-
-    ${
-      data.script
-        ? `
-          <details style="
-            margin-top:20px;
-          ">
-
-            <summary
-              style="
-                cursor:pointer;
-                font-weight:600;
-              "
-            >
-              📝 Generated Hindi Script
-            </summary>
-
-            <div style="
-              margin-top:12px;
-              padding:14px;
-              background:#f7f8fc;
-              border-radius:10px;
-              white-space:pre-wrap;
-              line-height:1.7;
-            ">
-              ${escapeHtml(data.script)}
-            </div>
-
-          </details>
-        `
-        : ""
-    }
-
   `;
 
 }
 
 
 /* =========================================
-   ERROR RESULT
+   SHOW ERROR
 ========================================= */
 
-function showVideoError(data) {
+function showError(data) {
 
   const result =
     $("videoResult");
@@ -542,44 +511,28 @@ function showVideoError(data) {
     return;
   }
 
-
-  result.classList.remove(
-    "hidden"
-  );
-
+  result.classList.remove("hidden");
 
   result.innerHTML = `
+    <div class="video-error-box">
 
-    <div style="
-      padding:18px;
-      border-radius:14px;
-      background:#fff1f2;
-      border:1px solid #fecdd3;
-    ">
+      <h2>❌ Video नहीं बन सकी</h2>
 
-      <h2>
-        ❌ Video नहीं बन सकी
-      </h2>
-
-      <p style="
-        color:#991b1b;
-        line-height:1.6;
-      ">
+      <p>
         ${escapeHtml(
           data.error ||
-          "Unknown processing error"
+          "Video processing failed."
         )}
       </p>
 
     </div>
-
   `;
 
 }
 
 
 /* =========================================
-   CREATE VIDEO
+   BUTTON
 ========================================= */
 
 const createButton =
@@ -589,7 +542,7 @@ const createButton =
 if (createButton) {
 
   createButton.onclick =
-    async () => {
+    async function () {
 
       if (!currentUser) {
 
@@ -605,26 +558,21 @@ if (createButton) {
         $("siteUrl")?.value.trim() ||
         "";
 
-
       const imageFile =
         $("imageFile")?.files?.[0] ||
         null;
-
 
       const category =
         $("category")?.value ||
         "short";
 
-
       const language =
         $("language")?.value ||
         "hi-IN";
 
-
       const voice =
         $("voice")?.value ||
         "hi-IN-Neural2-A";
-
 
       const instruction =
         $("instruction")?.value.trim() ||
@@ -646,18 +594,12 @@ if (createButton) {
       createButton.disabled =
         true;
 
-
-      createButton.style.opacity =
-        "0.6";
-
-
       createButton.textContent =
-        "⏳ Creating AI Job...";
+        "⏳ Creating...";
 
 
       const result =
         $("videoResult");
-
 
       if (result) {
 
@@ -667,6 +609,7 @@ if (createButton) {
 
         result.innerHTML =
           "";
+
       }
 
 
@@ -683,8 +626,7 @@ if (createButton) {
            SCREENSHOT
         ========================= */
 
-        let imageDataUrl =
-          "";
+        let imageDataUrl = "";
 
 
         if (imageFile) {
@@ -695,7 +637,6 @@ if (createButton) {
             "📷 Screenshot तैयार किया जा रहा है..."
           );
 
-
           imageDataUrl =
             await compressImage(
               imageFile
@@ -705,7 +646,7 @@ if (createButton) {
 
 
         /* =========================
-           FIRESTORE JOB
+           FIRESTORE JOB CREATE
         ========================= */
 
         showStatus(
@@ -726,17 +667,23 @@ if (createButton) {
               userId:
                 currentUser.uid,
 
-              category,
+              category:
+                category,
 
-              siteUrl,
+              siteUrl:
+                siteUrl,
 
-              imageDataUrl,
+              imageDataUrl:
+                imageDataUrl,
 
-              language,
+              language:
+                language,
 
-              voice,
+              voice:
+                voice,
 
-              instruction,
+              instruction:
+                instruction,
 
               title:
                 "AI Website Video",
@@ -758,42 +705,34 @@ if (createButton) {
 
 
         console.log(
-          "Video job created:",
+          "AI video job created:",
           docRef.id
         );
 
 
-        showStatus(
-          "queued",
-          5,
-          "⏳ AI job create हो गया। Processing शुरू होने का इंतजार है..."
-        );
+        /* =========================
+           REMOVE OLD LISTENER
+        ========================= */
 
-
-        /*
-         * पुराने listener को बंद करें
-         */
-
-        if (
-          unsubscribeVideo
-        ) {
+        if (unsubscribeVideo) {
 
           unsubscribeVideo();
 
           unsubscribeVideo =
             null;
+
         }
 
 
         /* =========================
-           REAL-TIME FIRESTORE LISTENER
+           REAL-TIME LISTENER
         ========================= */
 
         unsubscribeVideo =
           onSnapshot(
             docRef,
 
-            (snapshot) => {
+            function (snapshot) {
 
               if (!snapshot.exists()) {
 
@@ -812,16 +751,14 @@ if (createButton) {
 
 
               console.log(
-                "VIDEO STATUS:",
+                "LIVE VIDEO STATUS:",
                 data.status,
                 data.progress,
                 data.progressMessage
               );
 
 
-              /* =====================
-                 LIVE STATUS
-              ===================== */
+              /* LIVE PROGRESS */
 
               showStatus(
                 data.status,
@@ -842,12 +779,11 @@ if (createButton) {
                 showStatus(
                   "ready",
                   100,
-                  data.progressMessage ||
                   "🎉 Video पूरी तरह तैयार है!"
                 );
 
 
-                showVideoResult(
+                showReadyVideo(
                   data
                 );
 
@@ -855,21 +791,17 @@ if (createButton) {
                 createButton.disabled =
                   false;
 
-                createButton.style.opacity =
-                  "1";
-
                 createButton.textContent =
                   "✨ Generate AI Video";
 
 
-                if (
-                  unsubscribeVideo
-                ) {
+                if (unsubscribeVideo) {
 
                   unsubscribeVideo();
 
                   unsubscribeVideo =
                     null;
+
                 }
 
                 return;
@@ -893,7 +825,7 @@ if (createButton) {
                 );
 
 
-                showVideoError(
+                showError(
                   data
                 );
 
@@ -901,31 +833,27 @@ if (createButton) {
                 createButton.disabled =
                   false;
 
-                createButton.style.opacity =
-                  "1";
-
                 createButton.textContent =
                   "✨ Generate AI Video";
 
 
-                if (
-                  unsubscribeVideo
-                ) {
+                if (unsubscribeVideo) {
 
                   unsubscribeVideo();
 
                   unsubscribeVideo =
                     null;
+
                 }
 
               }
 
             },
 
-            (error) => {
+            function (error) {
 
               console.error(
-                "Firestore listener error:",
+                "Video listener error:",
                 error
               );
 
@@ -933,16 +861,13 @@ if (createButton) {
               showStatus(
                 "error",
                 0,
-                "❌ Live status पढ़ने में error: " +
+                "❌ Live status error: " +
                 error.message
               );
 
 
               createButton.disabled =
                 false;
-
-              createButton.style.opacity =
-                "1";
 
               createButton.textContent =
                 "✨ Generate AI Video";
@@ -954,7 +879,7 @@ if (createButton) {
       } catch (error) {
 
         console.error(
-          "CREATE VIDEO ERROR:",
+          "VIDEO CREATE ERROR:",
           error
         );
 
@@ -964,17 +889,14 @@ if (createButton) {
           0,
           "❌ " +
           (
-            error?.message ||
-            "AI video job create failed."
+            error.message ||
+            "AI job create failed."
           )
         );
 
 
         createButton.disabled =
           false;
-
-        createButton.style.opacity =
-          "1";
 
         createButton.textContent =
           "✨ Generate AI Video";
