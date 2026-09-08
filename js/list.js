@@ -1,0 +1,1 @@
+import { auth, db } from "./firebase.js"; export { auth, db };
