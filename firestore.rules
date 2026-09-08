@@ -1,8 +1,0 @@
-rules_version = '2';
-service cloud.firestore {
- match /databases/{database}/documents {
-  match /users/{uid} { allow create: if request.auth != null && request.auth.uid == uid; allow read,update: if request.auth != null && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'); }
-  match /videos/{id} { allow create: if request.auth != null && request.resource.data.uid == request.auth.uid; allow read,update,delete: if request.auth != null && (resource.data.uid == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'); }
-  match /ppts/{id} { allow create: if request.auth != null && request.resource.data.uid == request.auth.uid; allow read,update,delete: if request.auth != null && (resource.data.uid == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'); }
- }
-}
