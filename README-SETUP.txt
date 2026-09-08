@@ -1,30 +1,27 @@
-GREAT INDIA CREATOR — COMPLETE ZIP
+GREAT INDIA CREATOR — GITHUB ACTIONS VIDEO WORKER (SECRET-READY)
 
-Firebase project:
-great-india-creatore
+Firebase project: great-india-creatore
+GitHub repository: indiaeducat482-collab/great-india-creatore
 
-Already completed by user:
-1. Firebase Authentication -> Email/Password enabled
-2. Firestore Rules published
-3. Firebase config added to js/firebase-config.js
+IMPORTANT SECURITY NOTE
+The workflow is already wired to these GitHub Actions secrets:
+  GEMINI_API_KEY
+  FIREBASE_SERVICE_ACCOUNT_JSON
 
-UPLOAD / DEPLOY:
-- Upload all files to the GitHub repository root, preserving folders.
-- GitHub Pages can serve the static frontend.
-- Firebase Functions must be deployed separately with Firebase CLI from the project folder:
-  firebase login
-  firebase use great-india-creatore
-  firebase deploy --only functions
+Their real values are intentionally NOT stored inside this ZIP. This is required for security: a Gemini API key or Firebase service-account private key must never be placed in HTML/JS or committed to a public GitHub repository.
 
-AI KEY:
-The real AI backend expects a server-side Firebase Functions environment variable:
-GEMINI_API_KEY
-Do NOT put this key in frontend JS.
-Configure it as a Firebase Functions secret/environment according to your Firebase Functions deployment setup.
+The workflow reads them automatically as:
+  ${{ secrets.GEMINI_API_KEY }}
+  ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-IMPORTANT:
-- Firebase Cloud Functions / Google Cloud services may require billing.
-- The included video function generates a real MP4 with Hindi AI narration and a branded title card. Website-specific visual scenes can be expanded with screenshot rendering later.
-- PPT function generates a real PPTX from extracted text. PDF/image OCR extraction is intentionally kept separate from the AI function; the frontend currently sends a placeholder for binary files. TXT/MD files work directly.
-- Admin page is intentionally NOT secure yet. Do not expose it as an admin system until Firebase custom claims are implemented.
-- Firestore rules currently use "presentations" collection, matching the frontend.
+ONE-TIME GITHUB SETUP
+1. Upload all files from this ZIP to the repository root.
+2. Open GitHub → Settings → Secrets and variables → Actions.
+3. Add repository secret named GEMINI_API_KEY and paste your Gemini API key there.
+4. Add repository secret named FIREBASE_SERVICE_ACCOUNT_JSON and paste the complete Firebase service-account JSON there.
+5. Open Actions → Great India Creator - AI Video Worker → Run workflow.
+6. Create a NEW video job in the website.
+
+Do NOT create files named .env, service-account.json, firebase-adminsdk.json, or put API keys in JS/HTML.
+
+The worker uses GitHub Actions instead of Firebase Cloud Functions, so Firebase can remain on Spark for this architecture.

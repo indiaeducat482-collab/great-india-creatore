@@ -1,0 +1,49 @@
+name: Great India Creator - AI Video Worker
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: great-india-video-worker
+  cancel-in-progress: false
+
+jobs:
+  process-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: github-worker/package.json
+
+      - name: Install worker dependencies
+        working-directory: github-worker
+        run: npm install --no-audit --no-fund
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install free Hindi TTS
+        run: python -m pip install --disable-pip-version-check edge-tts
+
+      - name: Process queued video jobs
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          FIREBASE_STORAGE_BUCKET: great-india-creatore.firebasestorage.app
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          JOB_LIMIT: '1'
+        working-directory: github-worker
+        run: node process-video.js

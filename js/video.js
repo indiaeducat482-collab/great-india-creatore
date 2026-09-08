@@ -81,7 +81,7 @@ if (button) {
     const imageFile = $("imageFile") && $("imageFile").files ? $("imageFile").files[0] : null;
     const category = $("category") ? $("category").value : "short";
     const language = $("language") ? $("language").value : "hi-IN";
-    const voice = $("voice") ? $("voice").value : "hi-IN-Neural2-A";
+    const voice = $("voice") ? $("voice").value : "hi-IN-SwaraNeural";
     const instruction = $("instruction") ? $("instruction").value.trim() : "";
 
     if (!siteUrl && !imageFile) {

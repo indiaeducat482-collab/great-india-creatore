@@ -1,0 +1,12 @@
+{
+  "name": "great-india-creator-github-worker",
+  "private": true,
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0",
+    "@google/generative-ai": "^0.24.1",
+    "ffmpeg-static": "^5.2.0"
+  }
+}
