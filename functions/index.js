@@ -16,22 +16,40 @@ initializeApp();
 const db = getFirestore();
 const bucket = getStorage().bucket();
 
-/* =========================
-   GEMINI
-========================= */
 
-function getGemini() {
+/* =========================================
+   FIRESTORE STATUS UPDATE
+========================================= */
+
+async function updateProgress(ref, status, progress, message) {
+  await ref.update({
+    status,
+    progress,
+    progressMessage: message,
+    updatedAt: new Date()
+  });
+
+  console.log(
+    `[${progress}%] ${status}: ${message}`
+  );
+}
+
+
+/* =========================================
+   GEMINI
+========================================= */
+
+async function generateScript(prompt, imageDataUrl) {
+
   const key = process.env.GEMINI_API_KEY;
 
   if (!key) {
-    throw new Error("GEMINI_API_KEY is not configured.");
+    throw new Error(
+      "GEMINI_API_KEY is not configured."
+    );
   }
 
-  return new GoogleGenerativeAI(key);
-}
-
-async function generateVideoScript(prompt, imageDataUrl) {
-  const gen = getGemini();
+  const gen = new GoogleGenerativeAI(key);
 
   const model = gen.getGenerativeModel({
     model: "gemini-2.5-flash"
@@ -39,16 +57,17 @@ async function generateVideoScript(prompt, imageDataUrl) {
 
   let result;
 
-  /* Screenshot available */
   if (
     imageDataUrl &&
     imageDataUrl.startsWith("data:image/")
   ) {
+
     const match = imageDataUrl.match(
       /^data:(image\/[^;]+);base64,(.+)$/
     );
 
     if (match) {
+
       result = await model.generateContent([
         {
           text: prompt
@@ -63,7 +82,6 @@ async function generateVideoScript(prompt, imageDataUrl) {
     }
   }
 
-  /* Text only */
   if (!result) {
     result = await model.generateContent(prompt);
   }
@@ -71,26 +89,32 @@ async function generateVideoScript(prompt, imageDataUrl) {
   return result.response.text().trim();
 }
 
-/* =========================
-   SAFE WEBSITE TEXT
-========================= */
+
+/* =========================================
+   WEBSITE TEXT
+========================================= */
 
 async function getWebsiteText(url) {
-  if (!url) return "";
+
+  if (!url) {
+    return "";
+  }
 
   try {
-    const controller = new AbortController();
+
+    const controller =
+      new AbortController();
 
     const timer = setTimeout(() => {
       controller.abort();
-    }, 12000);
+    }, 10000);
 
     const response = await fetch(url, {
       redirect: "follow",
       signal: controller.signal,
       headers: {
         "User-Agent":
-          "Mozilla/5.0 GreatIndiaCreatorBot/1.0"
+          "Mozilla/5.0 GreatIndiaCreator"
       }
     });
 
@@ -100,25 +124,47 @@ async function getWebsiteText(url) {
       return "";
     }
 
-    let html = await response.text();
+    let html =
+      await response.text();
 
-    html = html
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-      .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&quot;/gi, '"')
-      .replace(/\s+/g, " ")
-      .trim();
+    html =
+      html
+        .replace(
+          /<script[\s\S]*?<\/script>/gi,
+          " "
+        )
+        .replace(
+          /<style[\s\S]*?<\/style>/gi,
+          " "
+        )
+        .replace(
+          /<noscript[\s\S]*?<\/noscript>/gi,
+          " "
+        )
+        .replace(
+          /<svg[\s\S]*?<\/svg>/gi,
+          " "
+        )
+        .replace(
+          /<[^>]+>/g,
+          " "
+        )
+        .replace(
+          /&nbsp;/gi,
+          " "
+        )
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim();
 
     return html.slice(0, 20000);
 
   } catch (error) {
+
     console.log(
-      "Website text unavailable:",
+      "Website fetch error:",
       error.message
     );
 
@@ -126,22 +172,26 @@ async function getWebsiteText(url) {
   }
 }
 
-/* =========================
-   HINDI TTS
-========================= */
 
-async function createHindiVoice(text, voiceName) {
+/* =========================================
+   HINDI VOICE
+========================================= */
+
+async function createVoice(text, voiceName) {
+
   const client =
     new textToSpeech.TextToSpeechClient();
 
   const [response] =
     await client.synthesizeSpeech({
+
       input: {
         text
       },
 
       voice: {
         languageCode: "hi-IN",
+
         name:
           voiceName ||
           "hi-IN-Neural2-A"
@@ -149,6 +199,7 @@ async function createHindiVoice(text, voiceName) {
 
       audioConfig: {
         audioEncoding: "MP3",
+
         speakingRate: 1.05
       }
     });
@@ -156,25 +207,34 @@ async function createHindiVoice(text, voiceName) {
   return response.audioContent;
 }
 
-/* =========================
-   UPLOAD FILE
-========================= */
 
-async function uploadVideo(filePath, destination) {
-  const token = crypto.randomUUID();
+/* =========================================
+   VIDEO UPLOAD
+========================================= */
 
-  await bucket.upload(filePath, {
-    destination,
+async function uploadVideo(
+  filePath,
+  destination
+) {
 
-    metadata: {
-      contentType: "video/mp4",
+  const token =
+    crypto.randomUUID();
+
+  await bucket.upload(
+    filePath,
+    {
+      destination,
 
       metadata: {
-        firebaseStorageDownloadTokens:
-          token
+        contentType: "video/mp4",
+
+        metadata: {
+          firebaseStorageDownloadTokens:
+            token
+        }
       }
     }
-  });
+  );
 
   return (
     "https://firebasestorage.googleapis.com/v0/b/" +
@@ -186,424 +246,527 @@ async function uploadVideo(filePath, destination) {
   );
 }
 
-/* =========================
-   VIDEO JOB
-========================= */
 
-exports.videoJobCreated = onDocumentCreated(
-  {
-    document: "videos/{videoId}",
+/* =========================================
+   VIDEO CREATOR
+========================================= */
 
-    region: "asia-south1",
+exports.videoJobCreated =
+  onDocumentCreated(
+    {
+      document:
+        "videos/{videoId}",
 
-    timeoutSeconds: 300,
+      region:
+        "asia-south1",
 
-    memory: "1GiB",
+      timeoutSeconds:
+        300,
 
-    maxInstances: 5
-  },
+      memory:
+        "1GiB",
 
-  async (event) => {
+      maxInstances:
+        5
+    },
 
-    const snap = event.data;
+    async (event) => {
 
-    if (!snap) {
-      return;
-    }
+      const snap =
+        event.data;
 
-    const d = snap.data();
+      if (!snap) {
+        return;
+      }
 
-    if (!d) {
-      return;
-    }
+      const d =
+        snap.data();
 
-    const videoId =
-      event.params.videoId;
+      if (!d) {
+        return;
+      }
 
-    const tempDir =
-      fs.mkdtempSync(
-        path.join(
-          os.tmpdir(),
-          "gic-"
-        )
-      );
+      const videoId =
+        event.params.videoId;
 
-    try {
-
-      console.log(
-        "VIDEO JOB START:",
-        videoId
-      );
-
-      /* =========================
-         PROCESSING
-      ========================= */
-
-      await snap.ref.update({
-        status: "processing",
-        updatedAt: new Date()
-      });
-
-      /* =========================
-         WEBSITE TEXT
-      ========================= */
-
-      const websiteText =
-        await getWebsiteText(
-          d.siteUrl
+      const tempDir =
+        fs.mkdtempSync(
+          path.join(
+            os.tmpdir(),
+            "gic-video-"
+          )
         );
 
-      /* =========================
-         VIDEO LENGTH
-      ========================= */
+      try {
 
-      const isShort =
-        d.category !== "long";
+        /* ===============================
+           QUEUED
+        =============================== */
 
-      const durationText =
-        isShort
-          ? "45 से 60 सेकंड"
-          : "2 से 4 मिनट";
+        await updateProgress(
+          snap.ref,
+          "queued",
+          5,
+          "AI video job queue में है..."
+        );
 
-      /* =========================
-         AI PROMPT
-      ========================= */
 
-      const prompt = `
-आप Great India Creator के लिए Hindi AI explanatory video बना रहे हैं।
+        /* ===============================
+           PROCESSING
+        =============================== */
+
+        await updateProgress(
+          snap.ref,
+          "processing",
+          10,
+          "Video processing शुरू हो रही है..."
+        );
+
+
+        /* ===============================
+           WEBSITE ANALYSIS
+        =============================== */
+
+        await updateProgress(
+          snap.ref,
+          "analyzing",
+          20,
+          "Website और screenshot analyze किए जा रहे हैं..."
+        );
+
+        const websiteText =
+          await getWebsiteText(
+            d.siteUrl
+          );
+
+
+        /* ===============================
+           AI SCRIPT
+        =============================== */
+
+        await updateProgress(
+          snap.ref,
+          "ai_script",
+          35,
+          "Gemini AI Hindi script बना रहा है..."
+        );
+
+        const isShort =
+          d.category !== "long";
+
+        const duration =
+          isShort
+            ? "45 से 60 सेकंड"
+            : "2 से 4 मिनट";
+
+        const prompt = `
+आप Great India Creator के लिए Hindi explanatory video narration तैयार करें।
 
 Video type:
 ${isShort ? "Short Video" : "Long / Full Video"}
 
 Target duration:
-${durationText}
+${duration}
 
 Website URL:
 ${d.siteUrl || "Not provided"}
 
 Website text:
-${websiteText || "Website text उपलब्ध नहीं है। Screenshot को देखें।"}
+${websiteText || "Website text उपलब्ध नहीं है। Screenshot को ध्यान से देखें।"}
 
 Extra instruction:
-${d.instruction || "कोई अतिरिक्त instruction नहीं है।"}
+${d.instruction || "कोई extra instruction नहीं है।"}
 
-काम:
-
-Website/portal को ध्यान से समझकर एक natural Hindi narration लिखें।
+Screenshot यदि दिया गया है तो उसे ध्यान से analyze करें।
 
 Narration में:
+- Website का उद्देश्य
+- Login / registration यदि दिखाई दे
+- Dashboard
+- Main services
+- Important buttons
+- User workflow
+- Step-by-step usage
+- Important features
+- Short conclusion
 
-1. Website/portal का उद्देश्य बताएं।
-2. दिखाई देने वाले मुख्य sections बताएं।
-3. Login/registration दिखाई दे तो समझाएं।
-4. Dashboard और मुख्य services समझाएं।
-5. महत्वपूर्ण buttons और उनका उपयोग बताएं।
-6. User को step-by-step बताएं कि portal कैसे इस्तेमाल करना है।
-7. Screenshot में दिखाई देने वाली चीजों को प्राथमिकता दें।
-8. केवल supported features बताएं।
-9. कोई feature invent न करें।
+केवल supported features बताएं।
+कोई imaginary feature न बनाएं।
 
-बहुत जरूरी:
-
-- केवल narration दें।
-- कोई heading नहीं।
-- कोई bullet नहीं।
-- कोई markdown नहीं।
-- भाषा आसान Hindi हो।
-- Voice-over के लिए natural sentences हों।
-- शुरुआत आकर्षक हो।
-- अंत में छोटा conclusion दें।
+केवल natural Hindi narration दें।
+कोई heading, markdown या bullet points न दें।
 `;
 
-      /* =========================
-         GEMINI SCRIPT
-      ========================= */
+        const script =
+          await generateScript(
+            prompt,
+            d.imageDataUrl
+          );
 
-      console.log(
-        "Generating Hindi AI script..."
-      );
-
-      const script =
-        await generateVideoScript(
-          prompt,
-          d.imageDataUrl
-        );
-
-      if (!script) {
-        throw new Error(
-          "AI script generate नहीं हुआ।"
-        );
-      }
-
-      console.log(
-        "AI SCRIPT READY"
-      );
-
-      /* =========================
-         HINDI VOICE
-      ========================= */
-
-      console.log(
-        "Generating Hindi voice..."
-      );
-
-      const audioData =
-        await createHindiVoice(
-          script,
-          d.voice
-        );
-
-      const audioFile =
-        path.join(
-          tempDir,
-          "voice.mp3"
-        );
-
-      fs.writeFileSync(
-        audioFile,
-        audioData
-      );
-
-      console.log(
-        "HINDI VOICE READY"
-      );
-
-      /* =========================
-         VIDEO FILE
-      ========================= */
-
-      const outputFile =
-        path.join(
-          tempDir,
-          "video.mp4"
-        );
-
-      const ffmpeg =
-        require("ffmpeg-static");
-
-      /* =========================
-         FFMPEG
-      ========================= */
-
-      console.log(
-        "Creating MP4..."
-      );
-
-      await new Promise(
-        (resolve, reject) => {
-
-          execFile(
-            ffmpeg,
-
-            [
-              "-y",
-
-              "-f",
-              "lavfi",
-
-              "-i",
-              "color=c=0x17142d:s=1280x720:r=30",
-
-              "-i",
-              audioFile,
-
-              "-vf",
-
-              "drawtext=text='Great India Creator':fontcolor=white:fontsize=52:x=(w-text_w)/2:y=280,drawtext=text='AI Website Explanatory Video':fontcolor=white:fontsize=30:x=(w-text_w)/2:y=360",
-
-              "-c:v",
-              "libx264",
-
-              "-preset",
-              "ultrafast",
-
-              "-tune",
-              "stillimage",
-
-              "-c:a",
-              "aac",
-
-              "-b:a",
-              "128k",
-
-              "-shortest",
-
-              "-pix_fmt",
-              "yuv420p",
-
-              outputFile
-            ],
-
-            {
-              timeout: 180000
-            },
-
-            (error, stdout, stderr) => {
-
-              if (error) {
-
-                console.error(
-                  "FFMPEG ERROR:",
-                  stderr
-                );
-
-                reject(error);
-
-                return;
-              }
-
-              resolve();
-            }
+        if (!script) {
+          throw new Error(
+            "AI script generate नहीं हुई।"
           );
         }
-      );
 
-      console.log(
-        "MP4 READY"
-      );
 
-      /* =========================
-         FIREBASE STORAGE
-      ========================= */
-
-      const destination =
-        `generated/${d.userId}/videos/${videoId}.mp4`;
-
-      console.log(
-        "Uploading MP4..."
-      );
-
-      const outputUrl =
-        await uploadVideo(
-          outputFile,
-          destination
+        await updateProgress(
+          snap.ref,
+          "script_ready",
+          45,
+          "✅ Hindi AI script तैयार है।"
         );
 
-      console.log(
-        "VIDEO UPLOAD READY"
-      );
 
-      /* =========================
-         FINAL STATUS
-      ========================= */
+        /* ===============================
+           HINDI VOICE
+        =============================== */
 
-      await snap.ref.update({
+        await updateProgress(
+          snap.ref,
+          "voice",
+          55,
+          "Hindi AI voice तैयार की जा रही है..."
+        );
 
-        status: "ready",
+        const audioData =
+          await createVoice(
+            script,
+            d.voice
+          );
 
-        title:
-          isShort
-            ? "AI Short Website Video"
-            : "AI Full Website Video",
+        const audioFile =
+          path.join(
+            tempDir,
+            "voice.mp3"
+          );
 
-        script,
+        fs.writeFileSync(
+          audioFile,
+          audioData
+        );
 
-        outputUrl,
 
-        updatedAt:
-          new Date()
+        await updateProgress(
+          snap.ref,
+          "voice_ready",
+          65,
+          "✅ Hindi AI voice तैयार है।"
+        );
 
-      });
 
-      console.log(
-        "VIDEO JOB COMPLETED:",
-        videoId
-      );
+        /* ===============================
+           VIDEO GENERATION
+        =============================== */
 
-      /* =========================
-         CLEANUP
-      ========================= */
+        await updateProgress(
+          snap.ref,
+          "video",
+          70,
+          "MP4 video बनाई जा रही है..."
+        );
 
-      try {
-        fs.rmSync(
-          tempDir,
-          {
-            recursive: true,
-            force: true
+        const outputFile =
+          path.join(
+            tempDir,
+            "video.mp4"
+          );
+
+        const ffmpeg =
+          require("ffmpeg-static");
+
+
+        await new Promise(
+          (resolve, reject) => {
+
+            execFile(
+              ffmpeg,
+
+              [
+                "-y",
+
+                "-f",
+                "lavfi",
+
+                "-i",
+                "color=c=0x17142d:s=1280x720:r=30",
+
+                "-i",
+                audioFile,
+
+                "-vf",
+
+                "drawtext=text='Great India Creator':fontcolor=white:fontsize=52:x=(w-text_w)/2:y=280,drawtext=text='AI Website Explanatory Video':fontcolor=white:fontsize=30:x=(w-text_w)/2:y=360",
+
+                "-c:v",
+                "libx264",
+
+                "-preset",
+                "ultrafast",
+
+                "-tune",
+                "stillimage",
+
+                "-c:a",
+                "aac",
+
+                "-b:a",
+                "128k",
+
+                "-shortest",
+
+                "-pix_fmt",
+                "yuv420p",
+
+                outputFile
+              ],
+
+              {
+                timeout:
+                  180000
+              },
+
+              (error, stdout, stderr) => {
+
+                if (error) {
+
+                  console.error(
+                    "FFmpeg error:",
+                    stderr
+                  );
+
+                  reject(error);
+
+                } else {
+
+                  resolve();
+
+                }
+              }
+            );
           }
         );
-      } catch (_) {}
 
-    } catch (error) {
 
-      console.error(
-        "VIDEO JOB ERROR:",
-        error
-      );
+        await updateProgress(
+          snap.ref,
+          "video_ready",
+          85,
+          "✅ MP4 video तैयार है।"
+        );
 
-      await snap.ref.update({
 
-        status: "error",
+        /* ===============================
+           STORAGE UPLOAD
+        =============================== */
 
-        error:
-          error?.message ||
-          "Video processing failed",
+        await updateProgress(
+          snap.ref,
+          "uploading",
+          90,
+          "Video Firebase Storage पर upload हो रही है..."
+        );
 
-        updatedAt:
-          new Date()
+        const destination =
+          `generated/${d.userId}/videos/${videoId}.mp4`;
 
-      });
+        const outputUrl =
+          await uploadVideo(
+            outputFile,
+            destination
+          );
+
+
+        await updateProgress(
+          snap.ref,
+          "finalizing",
+          97,
+          "Download link तैयार किया जा रहा है..."
+        );
+
+
+        /* ===============================
+           READY
+        =============================== */
+
+        await snap.ref.update({
+
+          status:
+            "ready",
+
+          progress:
+            100,
+
+          progressMessage:
+            "🎉 Video पूरी तरह तैयार है!",
+
+          title:
+            isShort
+              ? "AI Short Website Video"
+              : "AI Full Website Video",
+
+          script,
+
+          outputUrl,
+
+          updatedAt:
+            new Date()
+
+        });
+
+
+        console.log(
+          "VIDEO READY:",
+          videoId
+        );
+
+
+        /* ===============================
+           CLEANUP
+        =============================== */
+
+        try {
+
+          fs.rmSync(
+            tempDir,
+            {
+              recursive:
+                true,
+
+              force:
+                true
+            }
+          );
+
+        } catch (_) {}
+
+      } catch (error) {
+
+        console.error(
+          "VIDEO ERROR:",
+          error
+        );
+
+
+        await snap.ref.update({
+
+          status:
+            "error",
+
+          progress:
+            0,
+
+          progressMessage:
+            "❌ Video बनाने में error आया।",
+
+          error:
+            error?.message ||
+            "Video processing failed",
+
+          updatedAt:
+            new Date()
+
+        });
+
+
+        try {
+
+          fs.rmSync(
+            tempDir,
+            {
+              recursive:
+                true,
+
+              force:
+                true
+            }
+          );
+
+        } catch (_) {}
+      }
+    }
+  );
+
+
+/* =========================================
+   PPT CREATOR
+========================================= */
+
+exports.pptJobCreated =
+  onDocumentCreated(
+    {
+      document:
+        "presentations/{presentationId}",
+
+      region:
+        "asia-south1",
+
+      timeoutSeconds:
+        300,
+
+      memory:
+        "1GiB"
+    },
+
+    async (event) => {
+
+      const snap =
+        event.data;
+
+      if (!snap) {
+        return;
+      }
+
+      const d =
+        snap.data();
+
+      if (!d) {
+        return;
+      }
+
+      const presentationId =
+        event.params.presentationId;
 
       try {
-        fs.rmSync(
-          tempDir,
-          {
-            recursive: true,
-            force: true
-          }
-        );
-      } catch (_) {}
-    }
-  }
-);
+
+        await snap.ref.update({
+
+          status:
+            "processing",
+
+          progress:
+            10,
+
+          progressMessage:
+            "PPT processing शुरू हो रही है...",
+
+          updatedAt:
+            new Date()
+        });
 
 
-/* =========================
-   PPT JOB
-========================= */
+        const key =
+          process.env.GEMINI_API_KEY;
 
-exports.pptJobCreated = onDocumentCreated(
-  {
-    document:
-      "presentations/{presentationId}",
+        if (!key) {
+          throw new Error(
+            "GEMINI_API_KEY is not configured."
+          );
+        }
 
-    region:
-      "asia-south1",
+        const gen =
+          new GoogleGenerativeAI(
+            key
+          );
 
-    timeoutSeconds:
-      300,
+        const model =
+          gen.getGenerativeModel({
+            model:
+              "gemini-2.5-flash"
+          });
 
-    memory:
-      "1GiB"
-  },
 
-  async (event) => {
-
-    const snap =
-      event.data;
-
-    if (!snap) {
-      return;
-    }
-
-    const d =
-      snap.data();
-
-    if (!d) {
-      return;
-    }
-
-    const presentationId =
-      event.params.presentationId;
-
-    try {
-
-      await snap.ref.update({
-        status: "processing",
-        updatedAt: new Date()
-      });
-
-      const prompt = `
+        const prompt = `
 Convert these study notes into a clean PowerPoint presentation.
 
 Title:
@@ -613,7 +776,6 @@ Instruction:
 ${d.instruction || "Create a clear educational presentation."}
 
 Rules:
-
 - One topic per slide.
 - Clear slide title.
 - Short bullet points.
@@ -628,8 +790,7 @@ Format:
     "title": "Slide title",
     "bullets": [
       "Point 1",
-      "Point 2",
-      "Point 3"
+      "Point 2"
     ]
   }
 ]
@@ -639,220 +800,309 @@ Notes:
 ${d.sourceText || ""}
 `;
 
-      let raw =
-        await aiTextSimple(prompt);
 
-      raw =
-        raw
-          .replace(
-            /^```json/i,
-            ""
-          )
-          .replace(
-            /^```/i,
-            ""
-          )
-          .replace(
-            /```$/i,
-            ""
-          )
-          .trim();
+        await snap.ref.update({
 
-      const slides =
-        JSON.parse(raw);
+          status:
+            "ai_processing",
 
-      if (
-        !Array.isArray(slides) ||
-        slides.length === 0
-      ) {
-        throw new Error(
-          "Valid PPT slides नहीं मिले।"
-        );
-      }
+          progress:
+            35,
 
-      const ppt =
-        new PptxGenJS();
+          progressMessage:
+            "Gemini AI PPT slides बना रहा है...",
 
-      ppt.layout =
-        "LAYOUT_WIDE";
+          updatedAt:
+            new Date()
+        });
 
-      ppt.author =
-        "Great India Creator";
 
-      ppt.title =
-        d.title ||
-        "AI Presentation";
-
-      slides.forEach(
-        (item, index) => {
-
-          const slide =
-            ppt.addSlide();
-
-          slide.background = {
-            color: "F7F8FC"
-          };
-
-          slide.addText(
-            item.title ||
-            `Topic ${index + 1}`,
-            {
-              x: 0.7,
-              y: 0.5,
-              w: 12,
-              h: 0.7,
-              fontSize: 28,
-              bold: true,
-              color: "5B45E6"
-            }
+        const result =
+          await model.generateContent(
+            prompt
           );
 
-          const bullets =
-            (item.bullets || [])
-              .map((text) => ({
-                text: String(text),
-                options: {
-                  bullet: {
-                    indent: 14
-                  }
-                }
-              }));
+        let raw =
+          result.response.text()
+            .replace(
+              /^```json/i,
+              ""
+            )
+            .replace(
+              /^```/i,
+              ""
+            )
+            .replace(
+              /```$/i,
+              ""
+            )
+            .trim();
 
-          slide.addText(
-            bullets,
-            {
-              x: 1,
-              y: 1.5,
-              w: 11,
-              h: 5,
-              fontSize: 20,
-              color: "172033",
-              breakLine: false,
-              fit: "shrink"
-            }
+
+        const slides =
+          JSON.parse(raw);
+
+
+        if (
+          !Array.isArray(slides) ||
+          slides.length === 0
+        ) {
+          throw new Error(
+            "Valid PPT slides नहीं मिलीं।"
           );
         }
-      );
 
-      const tempDir =
-        fs.mkdtempSync(
+
+        await snap.ref.update({
+
+          status:
+            "creating_ppt",
+
+          progress:
+            60,
+
+          progressMessage:
+            "PowerPoint file बनाई जा रही है...",
+
+          updatedAt:
+            new Date()
+        });
+
+
+        const ppt =
+          new PptxGenJS();
+
+        ppt.layout =
+          "LAYOUT_WIDE";
+
+        ppt.author =
+          "Great India Creator";
+
+        ppt.title =
+          d.title ||
+          "AI Presentation";
+
+
+        slides.forEach(
+          (item, index) => {
+
+            const slide =
+              ppt.addSlide();
+
+            slide.background = {
+              color:
+                "F7F8FC"
+            };
+
+
+            slide.addText(
+              item.title ||
+              `Topic ${index + 1}`,
+              {
+                x:
+                  0.7,
+
+                y:
+                  0.5,
+
+                w:
+                  12,
+
+                h:
+                  0.7,
+
+                fontSize:
+                  28,
+
+                bold:
+                  true,
+
+                color:
+                  "5B45E6"
+              }
+            );
+
+
+            const bullets =
+              (item.bullets || [])
+                .map(
+                  (text) => ({
+                    text:
+                      String(text),
+
+                    options: {
+                      bullet: {
+                        indent:
+                          14
+                      }
+                    }
+                  })
+                );
+
+
+            slide.addText(
+              bullets,
+              {
+                x:
+                  1,
+
+                y:
+                  1.5,
+
+                w:
+                  11,
+
+                h:
+                  5,
+
+                fontSize:
+                  20,
+
+                color:
+                  "172033",
+
+                breakLine:
+                  false,
+
+                fit:
+                  "shrink"
+              }
+            );
+          }
+        );
+
+
+        const tempDir =
+          fs.mkdtempSync(
+            path.join(
+              os.tmpdir(),
+              "gic-ppt-"
+            )
+          );
+
+
+        const output =
           path.join(
-            os.tmpdir(),
-            "gic-ppt-"
-          )
-        );
+            tempDir,
+            `${presentationId}.pptx`
+          );
 
-      const output =
-        path.join(
-          tempDir,
-          `${presentationId}.pptx`
-        );
 
-      await ppt.writeFile({
-        fileName: output
-      });
+        await ppt.writeFile({
+          fileName:
+            output
+        });
 
-      const destination =
-        `generated/${d.userId}/ppt/${presentationId}.pptx`;
 
-      const token =
-        crypto.randomUUID();
+        await snap.ref.update({
 
-      await bucket.upload(
-        output,
-        {
-          destination,
+          status:
+            "uploading",
 
-          metadata: {
-            contentType:
-              "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          progress:
+            85,
+
+          progressMessage:
+            "PPT Firebase Storage पर upload हो रही है...",
+
+          updatedAt:
+            new Date()
+        });
+
+
+        const destination =
+          `generated/${d.userId}/ppt/${presentationId}.pptx`;
+
+
+        const token =
+          crypto.randomUUID();
+
+
+        await bucket.upload(
+          output,
+          {
+            destination,
 
             metadata: {
-              firebaseStorageDownloadTokens:
-                token
+
+              contentType:
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
+              metadata: {
+                firebaseStorageDownloadTokens:
+                  token
+              }
             }
           }
-        }
-      );
-
-      const outputUrl =
-        `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(destination)}?alt=media&token=${token}`;
-
-      await snap.ref.update({
-
-        status: "ready",
-
-        slideCount:
-          slides.length,
-
-        outputUrl,
-
-        updatedAt:
-          new Date()
-
-      });
-
-      try {
-        fs.rmSync(
-          tempDir,
-          {
-            recursive: true,
-            force: true
-          }
         );
-      } catch (_) {}
 
-    } catch (error) {
 
-      console.error(
-        "PPT JOB ERROR:",
-        error
-      );
+        const outputUrl =
+          `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(destination)}?alt=media&token=${token}`;
 
-      await snap.ref.update({
 
-        status: "error",
+        await snap.ref.update({
 
-        error:
-          error?.message ||
-          "PPT processing failed",
+          status:
+            "ready",
 
-        updatedAt:
-          new Date()
+          progress:
+            100,
 
-      });
+          progressMessage:
+            "🎉 PPT पूरी तरह तैयार है!",
+
+          slideCount:
+            slides.length,
+
+          outputUrl,
+
+          updatedAt:
+            new Date()
+        });
+
+
+        try {
+
+          fs.rmSync(
+            tempDir,
+            {
+              recursive:
+                true,
+
+              force:
+                true
+            }
+          );
+
+        } catch (_) {}
+
+      } catch (error) {
+
+        console.error(
+          "PPT ERROR:",
+          error
+        );
+
+
+        await snap.ref.update({
+
+          status:
+            "error",
+
+          progress:
+            0,
+
+          progressMessage:
+            "❌ PPT बनाने में error आया।",
+
+          error:
+            error?.message ||
+            "PPT processing failed",
+
+          updatedAt:
+            new Date()
+        });
+      }
     }
-  }
-);
-
-
-/* =========================
-   SIMPLE GEMINI FOR PPT
-========================= */
-
-async function aiTextSimple(prompt) {
-
-  const key =
-    process.env.GEMINI_API_KEY;
-
-  if (!key) {
-    throw new Error(
-      "GEMINI_API_KEY is not configured."
-    );
-  }
-
-  const gen =
-    new GoogleGenerativeAI(key);
-
-  const model =
-    gen.getGenerativeModel({
-      model: "gemini-2.5-flash"
-    });
-
-  const result =
-    await model.generateContent(
-      prompt
-    );
-
-  return result.response.text();
-}
+  );
