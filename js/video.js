@@ -13,48 +13,44 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 
-const $ = (id) => document.getElementById(id);
+const get = (id) => document.getElementById(id);
 
-let currentUser = null;
-let stopListener = null;
+let user = null;
+let unsubscribe = null;
 
 
-/* ================================
-   LOGIN
-================================ */
+/* LOGIN */
 
-onAuthStateChanged(auth, function (user) {
+onAuthStateChanged(auth, (currentUser) => {
 
-  currentUser = user;
+  user = currentUser;
 
   if (!user) {
-    location.href = "login.html";
+    window.location.href = "login.html";
   }
 
 });
 
 
-/* ================================
-   IMAGE COMPRESS
-================================ */
+/* IMAGE COMPRESS */
 
 function compressImage(file) {
 
-  return new Promise(function (resolve, reject) {
+  return new Promise((resolve, reject) => {
 
     const reader = new FileReader();
 
-    reader.onload = function () {
+    reader.onload = () => {
 
-      const image = new Image();
+      const img = new Image();
 
-      image.onload = function () {
+      img.onload = () => {
 
-        let width = image.width;
-        let height = image.height;
+        let width = img.width;
+        let height = img.height;
 
-        const maxWidth = 1280;
-        const maxHeight = 900;
+        const maxWidth = 1200;
+        const maxHeight = 800;
 
         if (width > maxWidth) {
 
@@ -74,20 +70,15 @@ function compressImage(file) {
 
         }
 
-        const canvas =
-          document.createElement("canvas");
+        const canvas = document.createElement("canvas");
 
-        canvas.width =
-          Math.round(width);
+        canvas.width = Math.round(width);
+        canvas.height = Math.round(height);
 
-        canvas.height =
-          Math.round(height);
+        const context = canvas.getContext("2d");
 
-        const ctx =
-          canvas.getContext("2d");
-
-        ctx.drawImage(
-          image,
+        context.drawImage(
+          img,
           0,
           0,
           canvas.width,
@@ -96,28 +87,23 @@ function compressImage(file) {
 
         let quality = 0.65;
 
-        let result =
-          canvas.toDataURL(
+        let data = canvas.toDataURL(
+          "image/jpeg",
+          quality
+        );
+
+        while (data.length > 850000 && quality > 0.3) {
+
+          quality = quality - 0.05;
+
+          data = canvas.toDataURL(
             "image/jpeg",
             quality
           );
 
-        while (
-          result.length > 850000 &&
-          quality > 0.30
-        ) {
-
-          quality -= 0.05;
-
-          result =
-            canvas.toDataURL(
-              "image/jpeg",
-              quality
-            );
-
         }
 
-        if (result.length > 950000) {
+        if (data.length > 950000) {
 
           reject(
             new Error(
@@ -128,11 +114,11 @@ function compressImage(file) {
           return;
         }
 
-        resolve(result);
+        resolve(data);
 
       };
 
-      image.onerror = function () {
+      img.onerror = () => {
 
         reject(
           new Error(
@@ -142,11 +128,11 @@ function compressImage(file) {
 
       };
 
-      image.src = reader.result;
+      img.src = reader.result;
 
     };
 
-    reader.onerror = function () {
+    reader.onerror = () => {
 
       reject(
         new Error(
@@ -163,80 +149,64 @@ function compressImage(file) {
 }
 
 
-/* ================================
-   STATUS MESSAGE
-================================ */
+/* STATUS MESSAGE */
 
-function getMessage(status) {
+function statusMessage(status) {
 
-  if (status === "queued") {
-    return "⏳ AI video job queue में है...";
+  switch (status) {
+
+    case "queued":
+      return "⏳ AI video job queue में है...";
+
+    case "processing":
+      return "⚙️ Video processing शुरू हो रही है...";
+
+    case "analyzing":
+      return "🔎 Website और screenshot analyze किए जा रहे हैं...";
+
+    case "ai_script":
+      return "🧠 AI Hindi script बना रहा है...";
+
+    case "script_ready":
+      return "✅ Hindi AI script तैयार है।";
+
+    case "voice":
+      return "🎙️ Hindi AI voice बनाई जा रही है...";
+
+    case "voice_ready":
+      return "✅ Hindi AI voice तैयार है।";
+
+    case "video":
+      return "🎬 MP4 video बनाई जा रही है...";
+
+    case "video_ready":
+      return "✅ MP4 video तैयार है।";
+
+    case "uploading":
+      return "☁️ Video Firebase Storage पर upload हो रही है...";
+
+    case "finalizing":
+      return "🔗 Download link तैयार किया जा रहा है...";
+
+    case "ready":
+      return "🎉 Video पूरी तरह तैयार है!";
+
+    case "error":
+      return "❌ Video processing में error आया।";
+
+    default:
+      return "⚙️ Video processing हो रही है...";
+
   }
-
-  if (status === "processing") {
-    return "⚙️ Video processing शुरू हो रही है...";
-  }
-
-  if (status === "analyzing") {
-    return "🔎 Website और screenshot analyze किए जा रहे हैं...";
-  }
-
-  if (status === "ai_script") {
-    return "🧠 AI Hindi script बना रहा है...";
-  }
-
-  if (status === "script_ready") {
-    return "✅ Hindi AI script तैयार है।";
-  }
-
-  if (status === "voice") {
-    return "🎙️ Hindi AI voice बनाई जा रही है...";
-  }
-
-  if (status === "voice_ready") {
-    return "✅ Hindi AI voice तैयार है।";
-  }
-
-  if (status === "video") {
-    return "🎬 MP4 video बनाई जा रही है...";
-  }
-
-  if (status === "video_ready") {
-    return "✅ MP4 video तैयार है।";
-  }
-
-  if (status === "uploading") {
-    return "☁️ Video Firebase Storage पर upload हो रही है...";
-  }
-
-  if (status === "finalizing") {
-    return "🔗 Download link तैयार किया जा रहा है...";
-  }
-
-  if (status === "ready") {
-    return "🎉 Video पूरी तरह तैयार है!";
-  }
-
-  if (status === "error") {
-    return "❌ Video processing में error आया।";
-  }
-
-  return "⚙️ Video processing हो रही है...";
 
 }
 
 
-/* ================================
-   STATUS DISPLAY
-================================ */
+/* SHOW STATUS */
 
-function showStatus(
-  status,
-  progress,
-  message
-) {
+function showStatus(status, progress, message) {
 
-  const box = $("videoStatus");
+  const box = get("videoStatus");
 
   if (!box) {
     return;
@@ -258,39 +228,36 @@ function showStatus(
 
   const text =
     message ||
-    getMessage(status);
+    statusMessage(status);
 
 
   box.innerHTML =
-    '<div style="margin-top:18px;padding:18px;border-radius:14px;background:#f7f8fc;border:1px solid #e5e7eb;">' +
+    '<div style="margin-top:18px;padding:16px;border:1px solid #ddd;border-radius:12px;background:#f8f9fa;">' +
 
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
 
-        '<strong>' +
+        '<span style="font-weight:600;">' +
           text +
-        '</strong>' +
+        '</span>' +
 
-        '<strong>' +
+        '<span style="font-weight:700;">' +
           percent +
           '%' +
-        '</strong>' +
+        '</span>' +
 
       '</div>' +
 
-      '<div style="width:100%;height:12px;background:#e5e7eb;border-radius:20px;overflow:hidden;">' +
+      '<div style="width:100%;height:12px;background:#ddd;border-radius:20px;overflow:hidden;">' +
 
-        '<div style="height:100%;width:' +
+        '<div style="width:' +
           percent +
-          '%;background:#6366f1;border-radius:20px;transition:width .5s;">' +
-        '</div>' +
+          '%;height:100%;background:#6366f1;border-radius:20px;transition:width .5s ease;"></div>' +
 
       '</div>' +
 
-      '<div style="margin-top:10px;font-size:13px;color:#666;">' +
-
+      '<div style="margin-top:8px;font-size:13px;color:#666;">' +
         'Status: ' +
         (status || "processing") +
-
       '</div>' +
 
     '</div>';
@@ -298,48 +265,44 @@ function showStatus(
 }
 
 
-/* ================================
-   READY VIDEO
-================================ */
+/* SHOW READY VIDEO */
 
-function showReady(data) {
+function showReadyVideo(data) {
 
-  const result =
-    $("videoResult");
+  const result = get("videoResult");
 
   if (!result) {
     return;
   }
 
-  const url =
-    data.outputUrl;
-
   result.classList.remove("hidden");
+
+  const url = data.outputUrl;
 
   if (!url) {
 
     result.innerHTML =
-      '<div style="padding:18px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;">' +
+      '<div style="padding:16px;border:1px solid #f0c36d;border-radius:12px;background:#fff8e1;">' +
         '<h2>⚠️ Video तैयार है</h2>' +
-        '<p>लेकिन download link नहीं मिला।</p>' +
+        '<p>Download link नहीं मिला।</p>' +
       '</div>';
 
     return;
   }
 
 
-  let scriptPart = "";
+  let scriptHtml = "";
 
   if (data.script) {
 
-    scriptPart =
+    scriptHtml =
       '<details style="margin-top:18px;">' +
 
-        '<summary style="cursor:pointer;font-weight:bold;">' +
-          '📝 Hindi Script' +
+        '<summary style="cursor:pointer;font-weight:600;">' +
+          '📝 Generated Hindi Script' +
         '</summary>' +
 
-        '<div style="margin-top:10px;padding:14px;background:#f7f8fc;border-radius:10px;white-space:pre-wrap;">' +
+        '<div style="margin-top:10px;padding:14px;background:#f5f5f5;border-radius:10px;white-space:pre-wrap;">' +
           data.script +
         '</div>' +
 
@@ -349,7 +312,7 @@ function showReady(data) {
 
 
   result.innerHTML =
-    '<div style="padding:18px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;">' +
+    '<div style="padding:18px;border:1px solid #b7e4c7;border-radius:14px;background:#f0fff4;">' +
 
       '<h2>🎬 Your AI Video</h2>' +
 
@@ -357,35 +320,36 @@ function showReady(data) {
         (data.title || "AI Website Video") +
       '</p>' +
 
-      '<video controls playsinline style="width:100%;max-width:900px;border-radius:14px;background:#000;">' +
+      '<video controls playsinline style="width:100%;max-width:900px;border-radius:12px;background:#000;">' +
+
         '<source src="' +
           url +
-        '" type="video/mp4">' +
+          '" type="video/mp4">' +
+
       '</video>' +
 
-      '<br>' +
+      '<div style="margin-top:15px;">' +
 
-      '<a href="' +
-        url +
-        '" target="_blank" rel="noopener" class="primary">' +
-        '⬇️ Download Video' +
-      '</a>' +
+        '<a href="' +
+          url +
+          '" target="_blank" rel="noopener" class="primary">' +
+          '⬇️ Download Video' +
+        '</a>' +
 
-      scriptPart +
+      '</div>' +
+
+      scriptHtml +
 
     '</div>';
 
 }
 
 
-/* ================================
-   ERROR
-================================ */
+/* SHOW ERROR */
 
-function showError(data) {
+function showVideoError(data) {
 
-  const result =
-    $("videoResult");
+  const result = get("videoResult");
 
   if (!result) {
     return;
@@ -394,7 +358,7 @@ function showError(data) {
   result.classList.remove("hidden");
 
   result.innerHTML =
-    '<div style="padding:18px;background:#fff1f2;border:1px solid #fecdd3;border-radius:14px;">' +
+    '<div style="padding:16px;border:1px solid #f5b5b5;border-radius:12px;background:#fff1f1;">' +
 
       '<h2>❌ Video नहीं बन सकी</h2>' +
 
@@ -407,375 +371,339 @@ function showError(data) {
 }
 
 
-/* ================================
-   CREATE BUTTON
-================================ */
+/* CREATE BUTTON */
 
-const button =
-  $("createVideoBtn");
+const button = get("createVideoBtn");
 
 
 if (button) {
 
-  button.onclick =
-    async function () {
+  button.addEventListener("click", async () => {
 
-      if (!currentUser) {
+    if (!user) {
 
-        alert("पहले Login करें।");
+      alert("पहले Login करें।");
 
-        return;
+      return;
+    }
+
+
+    const siteUrl =
+      get("siteUrl")
+        ? get("siteUrl").value.trim()
+        : "";
+
+
+    const imageFile =
+      get("imageFile") &&
+      get("imageFile").files
+        ? get("imageFile").files[0]
+        : null;
+
+
+    const category =
+      get("category")
+        ? get("category").value
+        : "short";
+
+
+    const language =
+      get("language")
+        ? get("language").value
+        : "hi-IN";
+
+
+    const voice =
+      get("voice")
+        ? get("voice").value
+        : "hi-IN-Neural2-A";
+
+
+    const instruction =
+      get("instruction")
+        ? get("instruction").value.trim()
+        : "";
+
+
+    if (!siteUrl && !imageFile) {
+
+      showStatus(
+        "error",
+        0,
+        "Website URL या screenshot दें।"
+      );
+
+      return;
+    }
+
+
+    button.disabled = true;
+
+    button.textContent =
+      "⏳ Creating...";
+
+
+    const result = get("videoResult");
+
+    if (result) {
+
+      result.classList.add("hidden");
+
+      result.innerHTML = "";
+
+    }
+
+
+    try {
+
+      /* SCREENSHOT */
+
+      let imageDataUrl = "";
+
+      if (imageFile) {
+
+        showStatus(
+          "processing",
+          8,
+          "📷 Screenshot तैयार किया जा रहा है..."
+        );
+
+        imageDataUrl =
+          await compressImage(imageFile);
+
       }
 
 
-      const siteUrl =
-        $("siteUrl")
-          ? $("siteUrl").value.trim()
-          : "";
+      /* CREATE JOB */
+
+      showStatus(
+        "queued",
+        5,
+        "⏳ AI video job queue में भेजा जा रहा है..."
+      );
 
 
-      const imageFile =
-        $("imageFile") &&
-        $("imageFile").files
-          ? $("imageFile").files[0]
-          : null;
+      const videoRef =
+        await addDoc(
+          collection(db, "videos"),
+          {
 
+            userId:
+              user.uid,
 
-      const category =
-        $("category")
-          ? $("category").value
-          : "short";
+            category:
+              category,
 
+            siteUrl:
+              siteUrl,
 
-      const language =
-        $("language")
-          ? $("language").value
-          : "hi-IN";
+            imageDataUrl:
+              imageDataUrl,
 
+            language:
+              language,
 
-      const voice =
-        $("voice")
-          ? $("voice").value
-          : "hi-IN-Neural2-A";
+            voice:
+              voice,
 
+            instruction:
+              instruction,
 
-      const instruction =
-        $("instruction")
-          ? $("instruction").value.trim()
-          : "";
+            title:
+              "AI Website Video",
 
+            status:
+              "queued",
 
-      if (!siteUrl && !imageFile) {
+            progress:
+              5,
 
-        showStatus(
-          "error",
-          0,
-          "Website URL या screenshot दें।"
+            progressMessage:
+              "⏳ AI video job queue में है...",
+
+            createdAt:
+              serverTimestamp()
+
+          }
         );
 
-        return;
+
+      console.log(
+        "AI VIDEO JOB:",
+        videoRef.id
+      );
+
+
+      /* REMOVE OLD LISTENER */
+
+      if (unsubscribe) {
+
+        unsubscribe();
+
+        unsubscribe = null;
+
       }
 
 
-      button.disabled = true;
+      /* REAL TIME FIRESTORE */
 
-      button.textContent =
-        "⏳ Creating...";
+      unsubscribe =
+        onSnapshot(
+          videoRef,
 
+          (snapshot) => {
 
-      const result =
-        $("videoResult");
-
-      if (result) {
-
-        result.classList.add("hidden");
-
-        result.innerHTML = "";
-
-      }
-
-
-      try {
-
-        /* ==========================
-           IMAGE
-        ========================== */
-
-        let imageDataUrl = "";
-
-        if (imageFile) {
-
-          showStatus(
-            "processing",
-            8,
-            "📷 Screenshot तैयार किया जा रहा है..."
-          );
-
-          imageDataUrl =
-            await compressImage(
-              imageFile
-            );
-
-        }
-
-
-        /* ==========================
-           CREATE FIRESTORE JOB
-        ========================== */
-
-        showStatus(
-          "queued",
-          5,
-          "⏳ AI video job queue में भेजा जा रहा है..."
-        );
-
-
-        const docRef =
-          await addDoc(
-            collection(
-              db,
-              "videos"
-            ),
-            {
-
-              userId:
-                currentUser.uid,
-
-              category:
-                category,
-
-              siteUrl:
-                siteUrl,
-
-              imageDataUrl:
-                imageDataUrl,
-
-              language:
-                language,
-
-              voice:
-                voice,
-
-              instruction:
-                instruction,
-
-              title:
-                "AI Website Video",
-
-              status:
-                "queued",
-
-              progress:
-                5,
-
-              progressMessage:
-                "⏳ AI video job queue में है...",
-
-              createdAt:
-                serverTimestamp()
-
-            }
-          );
-
-
-        console.log(
-          "AI JOB CREATED:",
-          docRef.id
-        );
-
-
-        showStatus(
-          "queued",
-          5,
-          "⏳ AI job create हो गया। Processing शुरू होने का इंतजार है..."
-        );
-
-
-        /* ==========================
-           REAL-TIME LISTENER
-        ========================== */
-
-        if (stopListener) {
-
-          stopListener();
-
-          stopListener = null;
-
-        }
-
-
-        stopListener =
-          onSnapshot(
-            docRef,
-
-            function (snapshot) {
-
-              if (!snapshot.exists()) {
-
-                showStatus(
-                  "error",
-                  0,
-                  "❌ Video job नहीं मिला।"
-                );
-
-                return;
-              }
-
-
-              const data =
-                snapshot.data();
-
-
-              console.log(
-                "VIDEO LIVE:",
-                data.status,
-                data.progress,
-                data.progressMessage
-              );
-
-
-              /* LIVE STATUS */
-
-              showStatus(
-                data.status,
-                data.progress,
-                data.progressMessage
-              );
-
-
-              /* ====================
-                 READY
-              ==================== */
-
-              if (
-                data.status === "ready"
-              ) {
-
-                showStatus(
-                  "ready",
-                  100,
-                  "🎉 Video पूरी तरह तैयार है!"
-                );
-
-
-                showReady(
-                  data
-                );
-
-
-                button.disabled =
-                  false;
-
-                button.textContent =
-                  "✨ Generate AI Video";
-
-
-                if (stopListener) {
-
-                  stopListener();
-
-                  stopListener = null;
-
-                }
-
-                return;
-              }
-
-
-              /* ====================
-                 ERROR
-              ==================== */
-
-              if (
-                data.status === "error"
-              ) {
-
-                showStatus(
-                  "error",
-                  0,
-                  data.progressMessage ||
-                  "❌ Video processing failed."
-                );
-
-
-                showError(
-                  data
-                );
-
-
-                button.disabled =
-                  false;
-
-                button.textContent =
-                  "✨ Generate AI Video";
-
-
-                if (stopListener) {
-
-                  stopListener();
-
-                  stopListener = null;
-
-                }
-
-              }
-
-            },
-
-            function (error) {
-
-              console.error(
-                "LIVE STATUS ERROR:",
-                error
-              );
-
+            if (!snapshot.exists()) {
 
               showStatus(
                 "error",
                 0,
-                "❌ Live status error: " +
-                error.message
+                "❌ Video job नहीं मिला।"
+              );
+
+              return;
+            }
+
+
+            const data =
+              snapshot.data();
+
+
+            console.log(
+              "VIDEO STATUS:",
+              data.status,
+              data.progress,
+              data.progressMessage
+            );
+
+
+            /* LIVE PROGRESS */
+
+            showStatus(
+              data.status,
+              data.progress,
+              data.progressMessage
+            );
+
+
+            /* READY */
+
+            if (data.status === "ready") {
+
+              showStatus(
+                "ready",
+                100,
+                data.progressMessage ||
+                "🎉 Video पूरी तरह तैयार है!"
               );
 
 
-              button.disabled =
-                false;
+              showReadyVideo(data);
+
+
+              button.disabled = false;
 
               button.textContent =
                 "✨ Generate AI Video";
 
+
+              if (unsubscribe) {
+
+                unsubscribe();
+
+                unsubscribe = null;
+
+              }
+
+              return;
             }
-          );
 
 
-      } catch (error) {
+            /* ERROR */
 
-        console.error(
-          "CREATE VIDEO ERROR:",
-          error
+            if (data.status === "error") {
+
+              showStatus(
+                "error",
+                0,
+                data.progressMessage ||
+                "❌ Video processing failed."
+              );
+
+
+              showVideoError(data);
+
+
+              button.disabled = false;
+
+              button.textContent =
+                "✨ Generate AI Video";
+
+
+              if (unsubscribe) {
+
+                unsubscribe();
+
+                unsubscribe = null;
+
+              }
+
+            }
+
+          },
+
+          (error) => {
+
+            console.error(
+              "FIRESTORE STATUS ERROR:",
+              error
+            );
+
+
+            showStatus(
+              "error",
+              0,
+              "❌ Live status error: " +
+              error.message
+            );
+
+
+            button.disabled = false;
+
+            button.textContent =
+              "✨ Generate AI Video";
+
+          }
         );
 
 
-        showStatus(
-          "error",
-          0,
-          "❌ " +
-          (
-            error.message ||
-            "AI job create failed."
-          )
-        );
+  } catch (error) {
+
+      console.error(
+        "CREATE VIDEO ERROR:",
+        error
+      );
 
 
-        button.disabled =
-          false;
+      showStatus(
+        "error",
+        0,
+        "❌ " +
+        (
+          error.message ||
+          "AI job create failed."
+        )
+      );
 
-        button.textContent =
-          "✨ Generate AI Video";
 
-      }
+      button.disabled = false;
 
-    };
+      button.textContent =
+        "✨ Generate AI Video";
+
+    }
+
+  });
 
 }
 ```
