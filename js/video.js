@@ -16,58 +16,42 @@ import {
 const $ = (id) => document.getElementById(id);
 
 let currentUser = null;
-let unsubscribeVideo = null;
+let stopListener = null;
 
 
-/* =========================================
-   LOGIN CHECK
-========================================= */
+/* ================================
+   LOGIN
+================================ */
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, function (user) {
 
   currentUser = user;
 
   if (!user) {
-    window.location.href = "login.html";
+    location.href = "login.html";
   }
 
 });
 
 
-/* =========================================
-   HTML ESCAPE
-========================================= */
-
-function escapeHtml(value) {
-
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-
-}
-
-
-/* =========================================
-   COMPRESS SCREENSHOT
-========================================= */
+/* ================================
+   IMAGE COMPRESS
+================================ */
 
 function compressImage(file) {
 
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
 
     const reader = new FileReader();
 
     reader.onload = function () {
 
-      const img = new Image();
+      const image = new Image();
 
-      img.onload = function () {
+      image.onload = function () {
 
-        let width = img.width;
-        let height = img.height;
+        let width = image.width;
+        let height = image.height;
 
         const maxWidth = 1280;
         const maxHeight = 900;
@@ -103,29 +87,29 @@ function compressImage(file) {
           canvas.getContext("2d");
 
         ctx.drawImage(
-          img,
+          image,
           0,
           0,
           canvas.width,
           canvas.height
         );
 
-        let quality = 0.70;
+        let quality = 0.65;
 
-        let dataUrl =
+        let result =
           canvas.toDataURL(
             "image/jpeg",
             quality
           );
 
         while (
-          dataUrl.length > 900000 &&
-          quality > 0.35
+          result.length > 850000 &&
+          quality > 0.30
         ) {
 
           quality -= 0.05;
 
-          dataUrl =
+          result =
             canvas.toDataURL(
               "image/jpeg",
               quality
@@ -133,7 +117,7 @@ function compressImage(file) {
 
         }
 
-        if (dataUrl.length > 950000) {
+        if (result.length > 950000) {
 
           reject(
             new Error(
@@ -144,11 +128,11 @@ function compressImage(file) {
           return;
         }
 
-        resolve(dataUrl);
+        resolve(result);
 
       };
 
-      img.onerror = function () {
+      image.onerror = function () {
 
         reject(
           new Error(
@@ -158,7 +142,7 @@ function compressImage(file) {
 
       };
 
-      img.src = reader.result;
+      image.src = reader.result;
 
     };
 
@@ -179,66 +163,72 @@ function compressImage(file) {
 }
 
 
-/* =========================================
-   DEFAULT STATUS MESSAGE
-========================================= */
+/* ================================
+   STATUS MESSAGE
+================================ */
 
-function defaultMessage(status) {
+function getMessage(status) {
 
-  const messages = {
+  if (status === "queued") {
+    return "⏳ AI video job queue में है...";
+  }
 
-    queued:
-      "⏳ AI video job queue में है...",
+  if (status === "processing") {
+    return "⚙️ Video processing शुरू हो रही है...";
+  }
 
-    processing:
-      "⚙️ Video processing शुरू हो रही है...",
+  if (status === "analyzing") {
+    return "🔎 Website और screenshot analyze किए जा रहे हैं...";
+  }
 
-    analyzing:
-      "🔎 Website और screenshot analyze किए जा रहे हैं...",
+  if (status === "ai_script") {
+    return "🧠 AI Hindi script बना रहा है...";
+  }
 
-    ai_script:
-      "🧠 AI Hindi script बना रहा है...",
+  if (status === "script_ready") {
+    return "✅ Hindi AI script तैयार है।";
+  }
 
-    script_ready:
-      "✅ Hindi AI script तैयार है।",
+  if (status === "voice") {
+    return "🎙️ Hindi AI voice बनाई जा रही है...";
+  }
 
-    voice:
-      "🎙️ Hindi AI voice बनाई जा रही है...",
+  if (status === "voice_ready") {
+    return "✅ Hindi AI voice तैयार है।";
+  }
 
-    voice_ready:
-      "✅ Hindi AI voice तैयार है।",
+  if (status === "video") {
+    return "🎬 MP4 video बनाई जा रही है...";
+  }
 
-    video:
-      "🎬 MP4 video बनाई जा रही है...",
+  if (status === "video_ready") {
+    return "✅ MP4 video तैयार है।";
+  }
 
-    video_ready:
-      "✅ MP4 video तैयार है।",
+  if (status === "uploading") {
+    return "☁️ Video Firebase Storage पर upload हो रही है...";
+  }
 
-    uploading:
-      "☁️ Video Firebase Storage पर upload हो रही है...",
+  if (status === "finalizing") {
+    return "🔗 Download link तैयार किया जा रहा है...";
+  }
 
-    finalizing:
-      "🔗 Download link तैयार किया जा रहा है...",
+  if (status === "ready") {
+    return "🎉 Video पूरी तरह तैयार है!";
+  }
 
-    ready:
-      "🎉 Video पूरी तरह तैयार है!",
+  if (status === "error") {
+    return "❌ Video processing में error आया।";
+  }
 
-    error:
-      "❌ Video processing में error आया।"
-
-  };
-
-  return (
-    messages[status] ||
-    "⚙️ Video processing हो रही है..."
-  );
+  return "⚙️ Video processing हो रही है...";
 
 }
 
 
-/* =========================================
-   SHOW LIVE STATUS
-========================================= */
+/* ================================
+   STATUS DISPLAY
+================================ */
 
 function showStatus(
   status,
@@ -252,168 +242,67 @@ function showStatus(
     return;
   }
 
-  let percent =
-    Number(progress);
+  let percent = Number(progress);
 
   if (Number.isNaN(percent)) {
     percent = 0;
   }
 
-  percent =
-    Math.max(
-      0,
-      Math.min(
-        100,
-        percent
-      )
-    );
+  if (percent < 0) {
+    percent = 0;
+  }
+
+  if (percent > 100) {
+    percent = 100;
+  }
 
   const text =
     message ||
-    defaultMessage(status);
-
-  box.innerHTML = `
-    <div class="video-progress-box">
-
-      <div class="video-progress-top">
-        <strong>${escapeHtml(text)}</strong>
-        <strong>${percent}%</strong>
-      </div>
-
-      <div class="video-progress-track">
-        <div
-          class="video-progress-bar"
-          style="width: ${percent}%;">
-        </div>
-      </div>
-
-      <div class="video-progress-status">
-        Status: ${escapeHtml(status || "processing")}
-      </div>
-
-    </div>
-  `;
-
-}
+    getMessage(status);
 
 
-/* =========================================
-   ADD PROGRESS CSS
-========================================= */
+  box.innerHTML =
+    '<div style="margin-top:18px;padding:18px;border-radius:14px;background:#f7f8fc;border:1px solid #e5e7eb;">' +
 
-function addProgressCSS() {
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
 
-  if (document.getElementById("videoProgressCSS")) {
-    return;
-  }
+        '<strong>' +
+          text +
+        '</strong>' +
 
-  const style =
-    document.createElement("style");
+        '<strong>' +
+          percent +
+          '%' +
+        '</strong>' +
 
-  style.id =
-    "videoProgressCSS";
+      '</div>' +
 
-  style.textContent = `
-    .video-progress-box {
-      margin-top: 18px;
-      padding: 18px;
-      border-radius: 14px;
-      background: #f7f8fc;
-      border: 1px solid #e5e7eb;
-    }
+      '<div style="width:100%;height:12px;background:#e5e7eb;border-radius:20px;overflow:hidden;">' +
 
-    .video-progress-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-      font-size: 15px;
-    }
+        '<div style="height:100%;width:' +
+          percent +
+          '%;background:#6366f1;border-radius:20px;transition:width .5s;">' +
+        '</div>' +
 
-    .video-progress-track {
-      width: 100%;
-      height: 12px;
-      background: #e5e7eb;
-      border-radius: 999px;
-      overflow: hidden;
-    }
+      '</div>' +
 
-    .video-progress-bar {
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        #6366f1,
-        #8b5cf6
-      );
-      border-radius: 999px;
-      transition: width 0.5s ease;
-    }
+      '<div style="margin-top:10px;font-size:13px;color:#666;">' +
 
-    .video-progress-status {
-      margin-top: 10px;
-      color: #6b7280;
-      font-size: 13px;
-    }
+        'Status: ' +
+        (status || "processing") +
 
-    .video-ready-box {
-      margin-top: 20px;
-      padding: 18px;
-      border-radius: 14px;
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-    }
+      '</div>' +
 
-    .video-error-box {
-      margin-top: 20px;
-      padding: 18px;
-      border-radius: 14px;
-      background: #fff1f2;
-      border: 1px solid #fecdd3;
-    }
-
-    .video-download-button {
-      display: inline-block;
-      margin-top: 15px;
-      padding: 12px 20px;
-      border-radius: 10px;
-      text-decoration: none;
-      font-weight: 600;
-      background: #6366f1;
-      color: white;
-    }
-
-    .video-preview {
-      width: 100%;
-      max-width: 900px;
-      display: block;
-      margin-top: 15px;
-      border-radius: 14px;
-      background: #000;
-    }
-
-    .video-script {
-      margin-top: 18px;
-      padding: 14px;
-      background: #f7f8fc;
-      border-radius: 10px;
-      white-space: pre-wrap;
-      line-height: 1.7;
-    }
-  `;
-
-  document.head.appendChild(style);
+    '</div>';
 
 }
 
-addProgressCSS();
 
+/* ================================
+   READY VIDEO
+================================ */
 
-/* =========================================
-   SHOW READY VIDEO
-========================================= */
-
-function showReadyVideo(data) {
+function showReady(data) {
 
   const result =
     $("videoResult");
@@ -425,82 +314,73 @@ function showReadyVideo(data) {
   const url =
     data.outputUrl;
 
+  result.classList.remove("hidden");
+
   if (!url) {
 
-    result.classList.remove("hidden");
-
-    result.innerHTML = `
-      <div class="video-error-box">
-        <h2>⚠️ Video तैयार है</h2>
-        <p>
-          Video बन गई लेकिन download link नहीं मिला।
-        </p>
-      </div>
-    `;
+    result.innerHTML =
+      '<div style="padding:18px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;">' +
+        '<h2>⚠️ Video तैयार है</h2>' +
+        '<p>लेकिन download link नहीं मिला।</p>' +
+      '</div>';
 
     return;
   }
 
-  result.classList.remove("hidden");
 
-  let scriptHtml = "";
+  let scriptPart = "";
 
   if (data.script) {
 
-    scriptHtml = `
-      <details style="margin-top:18px;">
+    scriptPart =
+      '<details style="margin-top:18px;">' +
 
-        <summary style="cursor:pointer;font-weight:600;">
-          📝 Generated Hindi Script
-        </summary>
+        '<summary style="cursor:pointer;font-weight:bold;">' +
+          '📝 Hindi Script' +
+        '</summary>' +
 
-        <div class="video-script">
-          ${escapeHtml(data.script)}
-        </div>
+        '<div style="margin-top:10px;padding:14px;background:#f7f8fc;border-radius:10px;white-space:pre-wrap;">' +
+          data.script +
+        '</div>' +
 
-      </details>
-    `;
+      '</details>';
 
   }
 
-  result.innerHTML = `
-    <div class="video-ready-box">
 
-      <h2>🎬 Your AI Video</h2>
+  result.innerHTML =
+    '<div style="padding:18px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;">' +
 
-      <p>
-        ${escapeHtml(
-          data.title ||
-          "AI Website Video"
-        )}
-      </p>
+      '<h2>🎬 Your AI Video</h2>' +
 
-      <video
-        class="video-preview"
-        controls
-        playsinline
-        src="${escapeHtml(url)}">
-      </video>
+      '<p>' +
+        (data.title || "AI Website Video") +
+      '</p>' +
 
-      <a
-        class="video-download-button"
-        target="_blank"
-        rel="noopener"
-        href="${escapeHtml(url)}">
-        ⬇️ Download Video
-      </a>
+      '<video controls playsinline style="width:100%;max-width:900px;border-radius:14px;background:#000;">' +
+        '<source src="' +
+          url +
+        '" type="video/mp4">' +
+      '</video>' +
 
-      ${scriptHtml}
+      '<br>' +
 
-    </div>
-  `;
+      '<a href="' +
+        url +
+        '" target="_blank" rel="noopener" class="primary">' +
+        '⬇️ Download Video' +
+      '</a>' +
+
+      scriptPart +
+
+    '</div>';
 
 }
 
 
-/* =========================================
-   SHOW ERROR
-========================================= */
+/* ================================
+   ERROR
+================================ */
 
 function showError(data) {
 
@@ -513,70 +393,76 @@ function showError(data) {
 
   result.classList.remove("hidden");
 
-  result.innerHTML = `
-    <div class="video-error-box">
+  result.innerHTML =
+    '<div style="padding:18px;background:#fff1f2;border:1px solid #fecdd3;border-radius:14px;">' +
 
-      <h2>❌ Video नहीं बन सकी</h2>
+      '<h2>❌ Video नहीं बन सकी</h2>' +
 
-      <p>
-        ${escapeHtml(
-          data.error ||
-          "Video processing failed."
-        )}
-      </p>
+      '<p>' +
+        (data.error || "Video processing failed.") +
+      '</p>' +
 
-    </div>
-  `;
+    '</div>';
 
 }
 
 
-/* =========================================
-   BUTTON
-========================================= */
+/* ================================
+   CREATE BUTTON
+================================ */
 
-const createButton =
+const button =
   $("createVideoBtn");
 
 
-if (createButton) {
+if (button) {
 
-  createButton.onclick =
+  button.onclick =
     async function () {
 
       if (!currentUser) {
 
-        alert(
-          "पहले Login करें।"
-        );
+        alert("पहले Login करें।");
 
         return;
       }
 
 
       const siteUrl =
-        $("siteUrl")?.value.trim() ||
-        "";
+        $("siteUrl")
+          ? $("siteUrl").value.trim()
+          : "";
+
 
       const imageFile =
-        $("imageFile")?.files?.[0] ||
-        null;
+        $("imageFile") &&
+        $("imageFile").files
+          ? $("imageFile").files[0]
+          : null;
+
 
       const category =
-        $("category")?.value ||
-        "short";
+        $("category")
+          ? $("category").value
+          : "short";
+
 
       const language =
-        $("language")?.value ||
-        "hi-IN";
+        $("language")
+          ? $("language").value
+          : "hi-IN";
+
 
       const voice =
-        $("voice")?.value ||
-        "hi-IN-Neural2-A";
+        $("voice")
+          ? $("voice").value
+          : "hi-IN-Neural2-A";
+
 
       const instruction =
-        $("instruction")?.value.trim() ||
-        "";
+        $("instruction")
+          ? $("instruction").value.trim()
+          : "";
 
 
       if (!siteUrl && !imageFile) {
@@ -591,10 +477,9 @@ if (createButton) {
       }
 
 
-      createButton.disabled =
-        true;
+      button.disabled = true;
 
-      createButton.textContent =
+      button.textContent =
         "⏳ Creating...";
 
 
@@ -603,31 +488,20 @@ if (createButton) {
 
       if (result) {
 
-        result.classList.add(
-          "hidden"
-        );
+        result.classList.add("hidden");
 
-        result.innerHTML =
-          "";
+        result.innerHTML = "";
 
       }
 
 
-      showStatus(
-        "queued",
-        5,
-        "⏳ AI video job create हो रहा है..."
-      );
-
-
       try {
 
-        /* =========================
-           SCREENSHOT
-        ========================= */
+        /* ==========================
+           IMAGE
+        ========================== */
 
         let imageDataUrl = "";
-
 
         if (imageFile) {
 
@@ -645,9 +519,9 @@ if (createButton) {
         }
 
 
-        /* =========================
-           FIRESTORE JOB CREATE
-        ========================= */
+        /* ==========================
+           CREATE FIRESTORE JOB
+        ========================== */
 
         showStatus(
           "queued",
@@ -705,30 +579,32 @@ if (createButton) {
 
 
         console.log(
-          "AI video job created:",
+          "AI JOB CREATED:",
           docRef.id
         );
 
 
-        /* =========================
-           REMOVE OLD LISTENER
-        ========================= */
+        showStatus(
+          "queued",
+          5,
+          "⏳ AI job create हो गया। Processing शुरू होने का इंतजार है..."
+        );
 
-        if (unsubscribeVideo) {
 
-          unsubscribeVideo();
+        /* ==========================
+           REAL-TIME LISTENER
+        ========================== */
 
-          unsubscribeVideo =
-            null;
+        if (stopListener) {
+
+          stopListener();
+
+          stopListener = null;
 
         }
 
 
-        /* =========================
-           REAL-TIME LISTENER
-        ========================= */
-
-        unsubscribeVideo =
+        stopListener =
           onSnapshot(
             docRef,
 
@@ -751,14 +627,14 @@ if (createButton) {
 
 
               console.log(
-                "LIVE VIDEO STATUS:",
+                "VIDEO LIVE:",
                 data.status,
                 data.progress,
                 data.progressMessage
               );
 
 
-              /* LIVE PROGRESS */
+              /* LIVE STATUS */
 
               showStatus(
                 data.status,
@@ -767,13 +643,12 @@ if (createButton) {
               );
 
 
-              /* =====================
+              /* ====================
                  READY
-              ===================== */
+              ==================== */
 
               if (
-                data.status ===
-                "ready"
+                data.status === "ready"
               ) {
 
                 showStatus(
@@ -783,24 +658,23 @@ if (createButton) {
                 );
 
 
-                showReadyVideo(
+                showReady(
                   data
                 );
 
 
-                createButton.disabled =
+                button.disabled =
                   false;
 
-                createButton.textContent =
+                button.textContent =
                   "✨ Generate AI Video";
 
 
-                if (unsubscribeVideo) {
+                if (stopListener) {
 
-                  unsubscribeVideo();
+                  stopListener();
 
-                  unsubscribeVideo =
-                    null;
+                  stopListener = null;
 
                 }
 
@@ -808,13 +682,12 @@ if (createButton) {
               }
 
 
-              /* =====================
+              /* ====================
                  ERROR
-              ===================== */
+              ==================== */
 
               if (
-                data.status ===
-                "error"
+                data.status === "error"
               ) {
 
                 showStatus(
@@ -830,19 +703,18 @@ if (createButton) {
                 );
 
 
-                createButton.disabled =
+                button.disabled =
                   false;
 
-                createButton.textContent =
+                button.textContent =
                   "✨ Generate AI Video";
 
 
-                if (unsubscribeVideo) {
+                if (stopListener) {
 
-                  unsubscribeVideo();
+                  stopListener();
 
-                  unsubscribeVideo =
-                    null;
+                  stopListener = null;
 
                 }
 
@@ -853,7 +725,7 @@ if (createButton) {
             function (error) {
 
               console.error(
-                "Video listener error:",
+                "LIVE STATUS ERROR:",
                 error
               );
 
@@ -866,10 +738,10 @@ if (createButton) {
               );
 
 
-              createButton.disabled =
+              button.disabled =
                 false;
 
-              createButton.textContent =
+              button.textContent =
                 "✨ Generate AI Video";
 
             }
@@ -879,7 +751,7 @@ if (createButton) {
       } catch (error) {
 
         console.error(
-          "VIDEO CREATE ERROR:",
+          "CREATE VIDEO ERROR:",
           error
         );
 
@@ -895,10 +767,10 @@ if (createButton) {
         );
 
 
-        createButton.disabled =
+        button.disabled =
           false;
 
-        createButton.textContent =
+        button.textContent =
           "✨ Generate AI Video";
 
       }
