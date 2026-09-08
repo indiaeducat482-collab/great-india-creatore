@@ -1,4 +1,0 @@
-import { auth, db } from "./firebase.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
-onAuthStateChanged(auth,async u=>{if(!u)return location.href="login.html";const p=(await getDoc(doc(db,"users",u.uid))).data();if(p?.role!=="admin"){document.getElementById("adminStatus").textContent="Access denied";return;}document.getElementById("adminStatus").textContent="Admin access granted.";document.getElementById("stats").textContent="Admin dashboard ready.";});
